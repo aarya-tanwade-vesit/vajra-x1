@@ -436,17 +436,28 @@ with st.sidebar:
     # ── Email Alerts ─────────────────────────────────────────────────────
     with st.expander("Alert Notifications", expanded=False):
 
-        st.markdown("**Email (Gmail)**")
+        st.markdown("**Email (Gmail Setup)**")
+        with st.popover("How to test alerts?"):
+            st.markdown("""
+**How to get email working in 2 mins:**
+1. Open **Google Account > Security**.
+2. Turn **ON** 2-Step Verification.
+3. Search for **"App passwords"** at the top.
+4. Select App: **Mail**, Device: **Other**.
+5. Copy the 16-character password it generates.
+6. Enter it below and click **Send Test Email**.
+            """)
+
         email_on = st.toggle("Enable Email Alerts", key="email_on")
-        my_gmail = st.text_input("Gmail address",
-                                  placeholder="yourname@gmail.com", key="s_email")
+        my_gmail = st.text_input("YOUR Gmail address",
+                                  placeholder="name@gmail.com", key="s_email")
         app_pwd  = st.text_input("App Password (16 chars)",
                                   placeholder="abcd efgh ijkl mnop",
                                   type="password",
-                                  help="Google Account > Security > 2-Step Verification > App Passwords > Mail > Generate",
+                                  help="Your 16-char secret generated in Google settings (not your regular login).",
                                   key="s_pass")
         alert_to = st.text_input("Send alerts TO",
-                                  placeholder="yourname@gmail.com or team@company.com",
+                                  placeholder="judge@company.com",
                                   key="r_email")
 
         if st.button("Send Test Email", use_container_width=True):
