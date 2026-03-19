@@ -84,6 +84,36 @@ hr { border-color: #1C2333; }
 """, unsafe_allow_html=True)
 
 # ---------------------------------------------------------------------------
+# Startup checks -- clear errors instead of Python tracebacks
+# ---------------------------------------------------------------------------
+import os, pathlib
+
+_MODEL_FILES = [
+    "deployed_models/champion_lightgbm_model.pkl",
+    "deployed_models/degradation_model.pkl",
+    "deployed_models/sensor_scaler.pkl",
+    "deployed_models/label_encoder.pkl",
+]
+_SCENARIO_FILES = [
+    "scenario_osf.csv", "scenario_hdf.csv",
+    "scenario_pwf.csv", "scenario_twf.csv",
+]
+
+_missing = [f for f in _MODEL_FILES + _SCENARIO_FILES if not pathlib.Path(f).exists()]
+if _missing:
+    st.error("**Missing required files:**")
+    for m in _missing:
+        st.code(m)
+    st.markdown("""
+**If running locally:** make sure you cloned the full repo including `deployed_models/` and the scenario CSVs.
+
+**If models are missing:** run the training notebook to regenerate the `.pkl` files.
+
+**If scenario CSVs are missing:** run `python generate_scenarios.py` (requires `sensors_data.csv` in the same folder).
+    """)
+    st.stop()
+
+# ---------------------------------------------------------------------------
 # Load models  (cached -- runs only once per session)
 # ---------------------------------------------------------------------------
 @st.cache_resource(show_spinner="Loading AI models...")
