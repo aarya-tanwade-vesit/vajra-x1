@@ -419,11 +419,8 @@ SCENARIO_DESC = {
 # Sidebar
 # ---------------------------------------------------------------------------
 with st.sidebar:
-    if os.path.exists("logo.png"):
-        st.image("logo.png", width=180)
-    else:
-        st.markdown("## Vajra-X1")
-    st.caption("AI Predictive Maintenance Command Center")
+    st.markdown("## Vajra-X1")
+    st.caption("Industrial AI Predictive Maintenance")
     st.divider()
 
     scenario = st.selectbox("Scenario", list(SCENARIOS.keys()),
