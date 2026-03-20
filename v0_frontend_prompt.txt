@@ -1,0 +1,36 @@
+Project Name: Vajra X1
+Context for v0:
+We are a team participating in a highly competitive tech hackathon. We are building an industrial AI service platform called Vajra X1. Our product is a predictive maintenance and risk scoring engine for interconnected CNC factory machines. We deploy multi-layered Machine Learning models at the edge to predict machine failures before they happen, simulate cascading failure stress mathematically, and instantly calculate both the financial and environmental impacts for factory floor managers.
+
+Vibe & Design Language:
+We want an ultra-modern, clean, and breathtaking "SaaS Corporate Command Center" aesthetic. Think sleek glass-morphism, smooth animations, and a dark-mode default with vibrant neon accents (neon greens, electric yellows, and urgent reds for status alerts). It should look exactly like a highly-polished, premium enterprise cybersecurity or aviation platform (similar to "AeroGuard"). Do not get bogged down hard-coding specific color hexes, but focus on making the spacing, typography, and component structure look incredibly professional.
+
+As an AI frontend generator, please build out the UI shell for the following pages and components based closely on our backend AI features:
+
+1. Landing Page
+- A striking hero section introducing Vajra X1: The Future of Predictive Industrial AI.
+- A strong value proposition targeting manufacturing enterprises.
+- Sleek top navigation header.
+- A "Get Started" / Onboarding Call to Action button.
+
+2. Onboarding Flow (Service Provider POV)
+- A clean setup modal or onboarding page.
+- We act as the service provider setting up the factory manager's environment.
+- Crucial Input Field: "Enter Factory Floor Manager Email for Critical Alerts". (We will link this to vajra.x1@gmail.com on the backend to trigger automated email reports).
+
+3. Main Interactive Digital Twin Dashboard (The Core Command Center)
+This needs to look like a live, mission-critical command center. It will have several distinct UI widgets:
+- Dynamic Network Graph Visualization (The Centerpiece): A visual topology/map showing three interconnected CNC machines (Node L, Node M, Node H). Show them linked together with animated edges. Design the nodes so their colors can change based on risk (Green -> Yellow -> Red) illustrating stress transferring across the network.
+- Live Sensor Telemetry: Ticking real-time line charts or sparklines for incoming data signals: Temperature, Torque, RPM, and Tool Wear.
+- Smart Categorized Alerts Panel: A notification feed log translating raw ML scores into actionable advice. E.g., "🟢 Safe (0-30%)", "🟡 Warning: Monitor Torque (31-70%)", "🔴 Critical: Impending Heat Failure (71-100%)". It should also specifically call out *which* machine part is failing based on failure modes (e.g., Heat Dissipation Failure, Power Failure).
+- "What-If" Stress Simulator: An interactive control panel containing sliders that hackathon judges can playfully interact with. For example, a slider labeled "Increase Global Ambient Temperature by °C".
+- Financial "Cost of Downtime" Ticker: A widget translating model risk into dollars/rupees. Show a live animated counter: "Preventative Fix Cost: ₹5,000 | Predicted Catastrophic Failure Cost: ₹150,000/hour. Action saves ₹145,000."
+- "Green Tech" ESG Monitor: A modern sustainability widget. Display a calculated "Mechanical Power" metric (Torque x Speed) and a "Wasted Energy & Carbon Footprint" ticker showing extra CO2 emitted due to an inefficiently running node.
+- Live "Radar" Explanation (XAI): A radar/spider chart component showing axes for Temp, RPM, Torque, and Tool Wear. Keep it clean: when healthy, it forms a small tight circle. When a machine degrades, a specific point (like Torque) visually stretches wide to the edge.
+- Technician's "Mobile AR" QR Code: A small card UI featuring a dynamic QR code next to the machine stats. Judges will scan this during the pitch to open a mobile-friendly AR "companion app".
+- "Post-Mortem" Snapshot Generator: A forensic export section. Include a prominent button labeled "📥 Download Failure Snapshot" or "📧 One-Click Email Incident Report" that generates a PDF/CSV of the last 50 data rows when Risk hits 100%.
+
+4. AI Model Metrics & Report Page
+- A completely separate, dedicated page detailing the heavy lifting of the data science.
+- Render beautiful data tables and KPI cards for our ML models (LightGBM, CatBoost, XGBoost, Random Forest).
+- Show metrics like: MCC Score (0.97+), F1-Score, Probability Calibration curves, and dual-layer anomaly detection stats. Make it look highly technical, but visually stunning and digestible to impress business/technical judges alike.
