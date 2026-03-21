@@ -89,16 +89,14 @@ hr { border-color: #1C2333; }
 import os, pathlib
 
 _MODEL_FILES = [
-    "deployed_models/vajra_champion_lgbm.pkl",
-    "deployed_models/vajra_anomaly_detector.pkl",
-    "deployed_models/vajra_calibrator.pkl",
+    "deployed_models/champion_lightgbm_model.pkl",
+    "deployed_models/degradation_model.pkl",
     "deployed_models/sensor_scaler.pkl",
-    "deployed_models/label_decoder.pkl",
+    "deployed_models/label_encoder.pkl",
 ]
 _SCENARIO_FILES = [
     "scenario_osf.csv", "scenario_hdf.csv",
     "scenario_pwf.csv", "scenario_twf.csv",
-    "scenario_mixed.csv"
 ]
 
 _missing = [f for f in _MODEL_FILES + _SCENARIO_FILES if not pathlib.Path(f).exists()]
@@ -120,15 +118,14 @@ if _missing:
 # ---------------------------------------------------------------------------
 @st.cache_resource(show_spinner="Loading AI models...")
 def load_models():
-    lgbm = joblib.load('deployed_models/vajra_champion_lgbm.pkl')
-    lof  = joblib.load('deployed_models/vajra_anomaly_detector.pkl')
-    cal  = joblib.load('deployed_models/vajra_calibrator.pkl')
+    lgbm = joblib.load('deployed_models/champion_lightgbm_model.pkl')
+    lof  = joblib.load('deployed_models/degradation_model.pkl')
     sc   = joblib.load('deployed_models/sensor_scaler.pkl')
-    le   = joblib.load('deployed_models/label_decoder.pkl')
+    le   = joblib.load('deployed_models/label_encoder.pkl')
     safe = list(le.classes_).index('No Failure')
-    return lgbm, lof, cal, sc, le, safe
+    return lgbm, lof, sc, le, safe
 
-lgbm_model, lof_model, calibrator, scaler, label_enc, safe_idx = load_models()
+lgbm_model, lof_model, scaler, label_enc, safe_idx = load_models()
 
 FEATURES = [
     'Air_temperature', 'Process_temperature', 'Rotational_speed',
@@ -146,33 +143,21 @@ def engineer(row):
     return d[FEATURES]
 
 def lof_to_pct(raw):
-    """LOF decision_function >= 0.5 -> 0% risk, <= -2.0 -> 100% risk.
-    The new LOF model outputs values from ~1.0 down to -13.0 instead of just +/- 0.3.
-    """
-    return float(max(0.0, min(100.0, (0.5 - raw) / 2.5 * 100)))
+    """LOF decision_function >= 0.3 -> 0% risk, <= -0.3 -> 100% risk."""
+    return float(max(0.0, min(100.0, (0.3 - raw) / 0.6 * 100)))
 
 # ---------------------------------------------------------------------------
-# Risk computation  (EMA smoothed, Calibrated override)
+# Risk computation  (EMA smoothed, LGBM override)
 # ---------------------------------------------------------------------------
-def compute_risk(lgbm_fail_prob, lof_pct, is_anomaly, lgbm_confirmed, prev_smooth, calibrator):
+def compute_risk(lof_pct, lgbm_fail, lgbm_confirmed, prev_smooth):
     """
-    raw = 0.65 * LOF% + 0.35 * Calibrated LGBM% + 15% Anomaly Penalty. Capped at 100%.
+    raw = 100 if LGBM confirms failure, else 0.65*LOF + 0.35*LGBM%
     smoothed = asymmetric EMA  (rises fast, falls slow -> no flickering)
     """
-    # 1. Base Calibrated Risk
-    calibrated_base = calibrator.predict([lgbm_fail_prob])[0] * 100.0
-    
-    # 2. Blend with LOF for early warning ramp, add anomaly penalty
-    raw = (0.65 * lof_pct) + (0.35 * calibrated_base)
-    if is_anomaly:
-        raw += 15.0
-    
-    # 3. Override
     if lgbm_confirmed:
         raw = 100.0
-        
-    raw = min(100.0, max(0.0, raw))
-        
+    else:
+        raw = min(100.0, 0.65 * lof_pct + 0.35 * lgbm_fail)
     alpha = 0.35 if raw > prev_smooth else 0.12
     smoothed = round(alpha * raw + (1.0 - alpha) * prev_smooth, 1)
     return round(raw, 1), smoothed
@@ -418,14 +403,12 @@ def notify_background(email_cfg, sms_cfg, subject, html, sms_body,
 # Scenarios
 # ---------------------------------------------------------------------------
 SCENARIOS = {
-    "MIXED -- Unseen Linear Degradation (Demo)": "scenario_mixed.csv",
     "OSF -- Overstrain Failure":       "scenario_osf.csv",
     "HDF -- Heat Dissipation Failure": "scenario_hdf.csv",
     "PWF -- Power Failure":            "scenario_pwf.csv",
     "TWF -- Tool Wear Failure":        "scenario_twf.csv",
 }
 SCENARIO_DESC = {
-    "MIXED -- Unseen Linear Degradation (Demo)": ("Unknown", "A slow, realistic, linear degradation ending in a surprise failure."),
     "OSF -- Overstrain Failure":       ("Screw", "Tool Wear x Torque > 12,000 Nm.min"),
     "HDF -- Heat Dissipation Failure": ("Thermometer", "Temp Diff < 8.6K AND RPM < 1380"),
     "PWF -- Power Failure":            ("Lightning", "Power < 3500W or > 9000W"),
@@ -436,15 +419,8 @@ SCENARIO_DESC = {
 # Sidebar
 # ---------------------------------------------------------------------------
 with st.sidebar:
-    st.markdown("## ⚡ Vajra-X1")
-    st.caption("Next-Gen Predictive Maintenance Command Center")
-    st.markdown("""
-<div style="font-size:0.8rem; color:#8B949E; margin-bottom:1rem;">
-<b>AI Engine:</b> Dual-Layer Architecture<br>
-<b>L1:</b> LOF (Unsupervised Anomaly Detection)<br>
-<b>L2:</b> LightGBM (Multiclass Supervised xAI)
-</div>
-""", unsafe_allow_html=True)
+    st.markdown("## Vajra-X1")
+    st.caption("Industrial AI Predictive Maintenance")
     st.divider()
 
     scenario = st.selectbox("Scenario", list(SCENARIOS.keys()),
@@ -599,7 +575,7 @@ with tab_signals:
         lof_bar    = st.empty()
         st.divider()
         st.markdown("### Formula")
-        st.latex(r"R = \min\!\left(100,\ 0.65\cdot LOF + 0.35\cdot \text{Calibrated LGBM} + 15\%\ \text{Penalty}\right)")
+        st.latex(r"R = \min\!\left(100,\ 0.65\cdot LOF + 0.35\cdot LGBM_{fail\%}\right)")
         st.latex(r"\text{Override:}\ \hat{y}_{LGBM}\neq\text{No Failure}\Rightarrow R=100\%")
         sb_w = st.columns(2)
         lof_weight_slot  = sb_w[0].empty()
@@ -609,11 +585,10 @@ with tab_signals:
 with tab_eval:
     st.markdown("### Live Accuracy vs Ground Truth")
     st.caption("y_pred = 1 when LightGBM predicts a failure class")
-    ea = st.columns(4)
+    ea = st.columns(3)
     eval_prec = ea[0].empty()
     eval_rec  = ea[1].empty()
     eval_f1   = ea[2].empty()
-    eval_mode = ea[3].empty()
     st.markdown("---")
     ev1, ev2 = st.columns([3, 2])
     ev1.markdown("**Risk vs Ground Truth**")
@@ -637,13 +612,13 @@ with tab_arch:
         st.info("Weight: **65%** of risk score")
 
     with a2:
-        st.markdown("### Layer 2: LightGBM (xAI)")
+        st.markdown("### Layer 2: LightGBM")
         with st.container(border=True):
             st.markdown("""
-**Multiclass Gradient Boosted Trees**
+**Gradient Boosted Tree Classifier**
 - Trained on full AI4I 2020 dataset (10,000 rows)
 - **98% accuracy** on failure classification
-- **Explainable AI (xAI):** Doesn't just predict *if* it fails, but *how* it fails by outputting probabilities for 5 distinct failure modes (HDF, OSF, PWF, TWF, RNF).
+- Hard prediction drives y_pred (never a threshold)
 - If it fires -> **Risk overrides to 100%**
 """)
         st.info("Weight: **35%** of risk score")
@@ -652,18 +627,20 @@ with tab_arch:
         st.markdown("### Design Rationale")
         with st.container(border=True):
             st.markdown("""
-**Unsupervised + Supervised Synergy**
+**LightGBM = Light Switch**
+0% until it matches a known pattern. Then 100%.
 
-**LOF = The Early Warning System**
-Detects when sensors "feel wrong" and drift from the healthy baseline. It catches anomalies *minutes* before a known failure signature forms.
+**LOF = Dimmer Switch**
+Rises from the moment sensors drift from the
+healthy cluster -- catches failures *minutes*
+before LightGBM detects anything.
 
-**LightGBM = The Diagnostic Expert**
-Stays at 0% until it mathematically recognizes a specific failure signature (e.g., Heat Dissipation). Once recognized, it diagnoses the exact root cause.
+**Together:** Early Warning + Hard Confirmation.
 """)
         st.success("Benchmarked vs Isolation Forest & Autoencoder")
 
     st.divider()
-    st.latex(r"R = \min\!\left(100,\ 0.65\cdot LOF + 0.35\cdot \text{Calibrated LGBM} + 15\%\ \text{Penalty}\right)")
+    st.latex(r"R = \min\!\left(100,\ 0.65\cdot LOF + 0.35\cdot LGBM_{fail\%}\right)")
     st.latex(r"\hat{y} = \mathbb{1}\!\left[\text{LightGBM class} \neq \text{No Failure}\right]")
 
 # ── Tab 5: Alert History ───────────────────────────────────────────────────
@@ -703,26 +680,24 @@ if run_btn:
             X        = engineer(row_df)
             X_scaled = scaler.transform(X)
 
-            # LOF Safety Net Anomaly Check
-            is_anomaly = (lof_model.predict(X_scaled)[0] == -1)
+            # LOF
             raw_lof = float(lof_model.decision_function(X_scaled)[0])
-            lof_pct = lof_to_pct(raw_lof) # Kept for UI display in charts
+            lof_pct = lof_to_pct(raw_lof)
 
-            # LightGBM Classifier
+            # LightGBM
             probs      = lgbm_model.predict_proba(X_scaled)[0]
             pred_idx   = int(np.argmax(probs))
             pred_label = label_enc.inverse_transform([pred_idx])[0]
-            lgbm_fail_prob = float(1.0 - probs[safe_idx])
-            lgbm_fail  = lgbm_fail_prob * 100 # Kept for UI display
+            lgbm_fail  = float((1.0 - probs[safe_idx]) * 100)
 
             fail_pairs = [(label_enc.classes_[i], float(p))
                           for i, p in enumerate(probs) if i != safe_idx]
             top_mode   = max(fail_pairs, key=lambda x: x[1])
 
-            # Risk calculation with Calibrator
+            # Risk
             lgbm_ok   = (pred_label != 'No Failure')
             prev_s    = history[-1]['Smoothed_Risk'] if history else 0.0
-            raw_r, sm = compute_risk(lgbm_fail_prob, lof_pct, is_anomaly, lgbm_ok, prev_s, calibrator)
+            raw_r, sm = compute_risk(lof_pct, lgbm_fail, lgbm_ok, prev_s)
             stage     = "CRITICAL" if lgbm_ok else get_stage(sm)
             y_pred    = int(lgbm_ok)
             ttf       = estimate_ttf(history, sm)
@@ -737,7 +712,6 @@ if run_btn:
                 'LGBM_Fail':           round(lgbm_fail, 2),
                 'Stage':               stage,
                 'Pred_Failure':        y_pred,
-                'Failure_Mode':        top_mode[0],
                 'Machine_failure':     int(row_df['Machine_failure'].iloc[0]) if has_gt else 0,
                 'Torque':              float(row_df['Torque'].iloc[0]),
                 'Tool_wear':           float(row_df['Tool_wear'].iloc[0]),
@@ -763,11 +737,8 @@ if run_btn:
             STYLE = {"NOMINAL": ("success", "NOMINAL"), "WARNING": ("warning", "WARNING"),
                      "CRITICAL": ("error", "CRITICAL")}
             fn, label = STYLE.get(stage, ("error", "CRITICAL"))
-            
-            display_mode = "Operations Normal" if stage == "NOMINAL" else top_mode[0]
-            
             getattr(alert_slot, fn)(
-                f"**{label}** -- {display_mode} -- Risk {sm:.1f}% -- TTF: {ttf}"
+                f"**{label}** -- {top_mode[0]} -- Risk {sm:.1f}% -- TTF: {ttf}"
             )
 
             # KPIs
@@ -820,11 +791,6 @@ if run_btn:
                         f"{recall_score(y_true, y_pred_arr, zero_division=0):.1%}")
                     eval_f1.metric("F1 Score",
                         f"{f1_score(y_true, y_pred_arr, zero_division=0):.1%}")
-                
-                # Show explicit root cause diagnostic
-                current_mode_display = top_mode[0] if y_pred else "Monitoring..."
-                eval_mode.metric("Predicted Root Cause", current_mode_display)
-                
                 # Scale Machine_failure (0/1) -> (0/100) so it's on the same axis as Risk (%)
                 hdf['GT_Failure_Pct'] = hdf['Machine_failure'] * 100
                 last_r_gt = hdf.iloc[[-1]].set_index('Time_Second')
@@ -835,7 +801,7 @@ if run_btn:
                     )
                 else:
                     et.add_rows(last_r_gt[['Risk', 'GT_Failure_Pct']])
-                log_cols = ['Time_Second','Risk','LOF','LGBM_Fail','Machine_failure','Pred_Failure','Failure_Mode','Stage']
+                log_cols = ['Time_Second','Risk','LOF','LGBM_Fail','Machine_failure','Pred_Failure','Stage']
                 eval_log.dataframe(hdf[log_cols].tail(12),
                                     use_container_width=True, hide_index=True)
 
@@ -916,6 +882,7 @@ if run_btn:
         ss[2].metric("Failures",    str(int(hdf['Pred_Failure'].sum())))
         ss[3].metric("Stage Changes", str(len(alert_log)))
 
+    st.balloons()
 
 else:
     with tab_live:
