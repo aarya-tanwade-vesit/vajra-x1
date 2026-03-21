@@ -609,10 +609,11 @@ with tab_signals:
 with tab_eval:
     st.markdown("### Live Accuracy vs Ground Truth")
     st.caption("y_pred = 1 when LightGBM predicts a failure class")
-    ea = st.columns(3)
+    ea = st.columns(4)
     eval_prec = ea[0].empty()
     eval_rec  = ea[1].empty()
     eval_f1   = ea[2].empty()
+    eval_mode = ea[3].empty()
     st.markdown("---")
     ev1, ev2 = st.columns([3, 2])
     ev1.markdown("**Risk vs Ground Truth**")
@@ -819,6 +820,11 @@ if run_btn:
                         f"{recall_score(y_true, y_pred_arr, zero_division=0):.1%}")
                     eval_f1.metric("F1 Score",
                         f"{f1_score(y_true, y_pred_arr, zero_division=0):.1%}")
+                
+                # Show explicit root cause diagnostic
+                current_mode_display = top_mode[0] if y_pred else "Monitoring..."
+                eval_mode.metric("Predicted Root Cause", current_mode_display)
+                
                 # Scale Machine_failure (0/1) -> (0/100) so it's on the same axis as Risk (%)
                 hdf['GT_Failure_Pct'] = hdf['Machine_failure'] * 100
                 last_r_gt = hdf.iloc[[-1]].set_index('Time_Second')
