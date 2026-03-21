@@ -89,10 +89,11 @@ hr { border-color: #1C2333; }
 import os, pathlib
 
 _MODEL_FILES = [
-    "deployed_models/champion_lightgbm_model.pkl",
-    "deployed_models/degradation_model.pkl",
+    "deployed_models/vajra_champion_lgbm.pkl",
+    "deployed_models/vajra_anomaly_detector.pkl",
+    "deployed_models/vajra_calibrator.pkl",
     "deployed_models/sensor_scaler.pkl",
-    "deployed_models/label_encoder.pkl",
+    "deployed_models/label_decoder.pkl",
 ]
 _SCENARIO_FILES = [
     "scenario_osf.csv", "scenario_hdf.csv",
@@ -118,14 +119,15 @@ if _missing:
 # ---------------------------------------------------------------------------
 @st.cache_resource(show_spinner="Loading AI models...")
 def load_models():
-    lgbm = joblib.load('deployed_models/champion_lightgbm_model.pkl')
-    lof  = joblib.load('deployed_models/degradation_model.pkl')
+    lgbm = joblib.load('deployed_models/vajra_champion_lgbm.pkl')
+    lof  = joblib.load('deployed_models/vajra_anomaly_detector.pkl')
+    cal  = joblib.load('deployed_models/vajra_calibrator.pkl')
     sc   = joblib.load('deployed_models/sensor_scaler.pkl')
-    le   = joblib.load('deployed_models/label_encoder.pkl')
+    le   = joblib.load('deployed_models/label_decoder.pkl')
     safe = list(le.classes_).index('No Failure')
-    return lgbm, lof, sc, le, safe
+    return lgbm, lof, cal, sc, le, safe
 
-lgbm_model, lof_model, scaler, label_enc, safe_idx = load_models()
+lgbm_model, lof_model, calibrator, scaler, label_enc, safe_idx = load_models()
 
 FEATURES = [
     'Air_temperature', 'Process_temperature', 'Rotational_speed',
@@ -147,17 +149,25 @@ def lof_to_pct(raw):
     return float(max(0.0, min(100.0, (0.3 - raw) / 0.6 * 100)))
 
 # ---------------------------------------------------------------------------
-# Risk computation  (EMA smoothed, LGBM override)
+# Risk computation  (EMA smoothed, Calibrated override)
 # ---------------------------------------------------------------------------
-def compute_risk(lof_pct, lgbm_fail, lgbm_confirmed, prev_smooth):
+def compute_risk(lgbm_fail_prob, is_anomaly, lgbm_confirmed, prev_smooth, calibrator):
     """
-    raw = 100 if LGBM confirms failure, else 0.65*LOF + 0.35*LGBM%
+    raw = Calibrated LGBM Failure Probability + 15% Anomaly Penalty. Capped at 100%.
     smoothed = asymmetric EMA  (rises fast, falls slow -> no flickering)
     """
+    # 1. Base Calibrated Risk
+    calibrated_base = calibrator.predict([lgbm_fail_prob])[0] * 100.0
+    
+    # 2. Add Anomaly Penalty
+    raw = calibrated_base + (15.0 if is_anomaly else 0.0)
+    
+    # 3. Override
     if lgbm_confirmed:
         raw = 100.0
-    else:
-        raw = min(100.0, 0.65 * lof_pct + 0.35 * lgbm_fail)
+        
+    raw = min(100.0, max(0.0, raw))
+        
     alpha = 0.35 if raw > prev_smooth else 0.12
     smoothed = round(alpha * raw + (1.0 - alpha) * prev_smooth, 1)
     return round(raw, 1), smoothed
@@ -575,7 +585,7 @@ with tab_signals:
         lof_bar    = st.empty()
         st.divider()
         st.markdown("### Formula")
-        st.latex(r"R = \min\!\left(100,\ 0.65\cdot LOF + 0.35\cdot LGBM_{fail\%}\right)")
+        st.latex(r"R = \min\!\left(100,\ \text{Calibrated LGBM}_{fail\%} + 15\%\ \text{Anomaly Penalty}\right)")
         st.latex(r"\text{Override:}\ \hat{y}_{LGBM}\neq\text{No Failure}\Rightarrow R=100\%")
         sb_w = st.columns(2)
         lof_weight_slot  = sb_w[0].empty()
@@ -640,7 +650,7 @@ before LightGBM detects anything.
         st.success("Benchmarked vs Isolation Forest & Autoencoder")
 
     st.divider()
-    st.latex(r"R = \min\!\left(100,\ 0.65\cdot LOF + 0.35\cdot LGBM_{fail\%}\right)")
+    st.latex(r"R = \min\!\left(100,\ \text{Calibrated LGBM}_{fail\%} + 15\%\ \text{Anomaly Penalty}\right)")
     st.latex(r"\hat{y} = \mathbb{1}\!\left[\text{LightGBM class} \neq \text{No Failure}\right]")
 
 # ── Tab 5: Alert History ───────────────────────────────────────────────────
@@ -680,24 +690,26 @@ if run_btn:
             X        = engineer(row_df)
             X_scaled = scaler.transform(X)
 
-            # LOF
+            # LOF Safety Net Anomaly Check
+            is_anomaly = (lof_model.predict(X_scaled)[0] == -1)
             raw_lof = float(lof_model.decision_function(X_scaled)[0])
-            lof_pct = lof_to_pct(raw_lof)
+            lof_pct = lof_to_pct(raw_lof) # Kept for UI display in charts
 
-            # LightGBM
+            # LightGBM Classifier
             probs      = lgbm_model.predict_proba(X_scaled)[0]
             pred_idx   = int(np.argmax(probs))
             pred_label = label_enc.inverse_transform([pred_idx])[0]
-            lgbm_fail  = float((1.0 - probs[safe_idx]) * 100)
+            lgbm_fail_prob = float(1.0 - probs[safe_idx])
+            lgbm_fail  = lgbm_fail_prob * 100 # Kept for UI display
 
             fail_pairs = [(label_enc.classes_[i], float(p))
                           for i, p in enumerate(probs) if i != safe_idx]
             top_mode   = max(fail_pairs, key=lambda x: x[1])
 
-            # Risk
+            # Risk calculation with Calibrator
             lgbm_ok   = (pred_label != 'No Failure')
             prev_s    = history[-1]['Smoothed_Risk'] if history else 0.0
-            raw_r, sm = compute_risk(lof_pct, lgbm_fail, lgbm_ok, prev_s)
+            raw_r, sm = compute_risk(lgbm_fail_prob, is_anomaly, lgbm_ok, prev_s, calibrator)
             stage     = "CRITICAL" if lgbm_ok else get_stage(sm)
             y_pred    = int(lgbm_ok)
             ttf       = estimate_ttf(history, sm)
