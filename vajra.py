@@ -751,8 +751,11 @@ if run_btn:
             STYLE = {"NOMINAL": ("success", "NOMINAL"), "WARNING": ("warning", "WARNING"),
                      "CRITICAL": ("error", "CRITICAL")}
             fn, label = STYLE.get(stage, ("error", "CRITICAL"))
+            
+            display_mode = "Operations Normal" if stage == "NOMINAL" else top_mode[0]
+            
             getattr(alert_slot, fn)(
-                f"**{label}** -- {top_mode[0]} -- Risk {sm:.1f}% -- TTF: {ttf}"
+                f"**{label}** -- {display_mode} -- Risk {sm:.1f}% -- TTF: {ttf}"
             )
 
             # KPIs
