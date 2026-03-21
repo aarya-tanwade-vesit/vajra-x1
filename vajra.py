@@ -585,10 +585,11 @@ with tab_signals:
 with tab_eval:
     st.markdown("### Live Accuracy vs Ground Truth")
     st.caption("y_pred = 1 when LightGBM predicts a failure class")
-    ea = st.columns(3)
+    ea = st.columns(4)
     eval_prec = ea[0].empty()
     eval_rec  = ea[1].empty()
     eval_f1   = ea[2].empty()
+    eval_mode = ea[3].empty()
     st.markdown("---")
     ev1, ev2 = st.columns([3, 2])
     ev1.markdown("**Risk vs Ground Truth**")
@@ -712,6 +713,7 @@ if run_btn:
                 'LGBM_Fail':           round(lgbm_fail, 2),
                 'Stage':               stage,
                 'Pred_Failure':        y_pred,
+                'Failure_Mode':        top_mode[0],
                 'Machine_failure':     int(row_df['Machine_failure'].iloc[0]) if has_gt else 0,
                 'Torque':              float(row_df['Torque'].iloc[0]),
                 'Tool_wear':           float(row_df['Tool_wear'].iloc[0]),
@@ -791,6 +793,11 @@ if run_btn:
                         f"{recall_score(y_true, y_pred_arr, zero_division=0):.1%}")
                     eval_f1.metric("F1 Score",
                         f"{f1_score(y_true, y_pred_arr, zero_division=0):.1%}")
+                
+                # Show explicit root cause diagnostic
+                current_mode_display = top_mode[0] if y_pred else "Monitoring..."
+                eval_mode.metric("Predicted Root Cause", current_mode_display)
+
                 # Scale Machine_failure (0/1) -> (0/100) so it's on the same axis as Risk (%)
                 hdf['GT_Failure_Pct'] = hdf['Machine_failure'] * 100
                 last_r_gt = hdf.iloc[[-1]].set_index('Time_Second')
@@ -801,7 +808,7 @@ if run_btn:
                     )
                 else:
                     et.add_rows(last_r_gt[['Risk', 'GT_Failure_Pct']])
-                log_cols = ['Time_Second','Risk','LOF','LGBM_Fail','Machine_failure','Pred_Failure','Stage']
+                log_cols = ['Time_Second','Risk','LOF','LGBM_Fail','Machine_failure','Pred_Failure','Failure_Mode','Stage']
                 eval_log.dataframe(hdf[log_cols].tail(12),
                                     use_container_width=True, hide_index=True)
 
