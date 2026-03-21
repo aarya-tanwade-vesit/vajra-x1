@@ -154,16 +154,18 @@ def lof_to_pct(raw):
 # ---------------------------------------------------------------------------
 # Risk computation  (EMA smoothed, Calibrated override)
 # ---------------------------------------------------------------------------
-def compute_risk(lgbm_fail_prob, is_anomaly, lgbm_confirmed, prev_smooth, calibrator):
+def compute_risk(lgbm_fail_prob, lof_pct, is_anomaly, lgbm_confirmed, prev_smooth, calibrator):
     """
-    raw = Calibrated LGBM Failure Probability + 15% Anomaly Penalty. Capped at 100%.
+    raw = 0.65 * LOF% + 0.35 * Calibrated LGBM% + 15% Anomaly Penalty. Capped at 100%.
     smoothed = asymmetric EMA  (rises fast, falls slow -> no flickering)
     """
     # 1. Base Calibrated Risk
     calibrated_base = calibrator.predict([lgbm_fail_prob])[0] * 100.0
     
-    # 2. Add Anomaly Penalty
-    raw = calibrated_base + (15.0 if is_anomaly else 0.0)
+    # 2. Blend with LOF for early warning ramp, add anomaly penalty
+    raw = (0.65 * lof_pct) + (0.35 * calibrated_base)
+    if is_anomaly:
+        raw += 15.0
     
     # 3. Override
     if lgbm_confirmed:
@@ -597,7 +599,7 @@ with tab_signals:
         lof_bar    = st.empty()
         st.divider()
         st.markdown("### Formula")
-        st.latex(r"R = \min\!\left(100,\ \text{Calibrated LGBM}_{fail\%} + 15\%\ \text{Anomaly Penalty}\right)")
+        st.latex(r"R = \min\!\left(100,\ 0.65\cdot LOF + 0.35\cdot \text{Calibrated LGBM} + 15\%\ \text{Penalty}\right)")
         st.latex(r"\text{Override:}\ \hat{y}_{LGBM}\neq\text{No Failure}\Rightarrow R=100\%")
         sb_w = st.columns(2)
         lof_weight_slot  = sb_w[0].empty()
@@ -660,7 +662,7 @@ Stays at 0% until it mathematically recognizes a specific failure signature (e.g
         st.success("Benchmarked vs Isolation Forest & Autoencoder")
 
     st.divider()
-    st.latex(r"R = \min\!\left(100,\ \text{Calibrated LGBM}_{fail\%} + 15\%\ \text{Anomaly Penalty}\right)")
+    st.latex(r"R = \min\!\left(100,\ 0.65\cdot LOF + 0.35\cdot \text{Calibrated LGBM} + 15\%\ \text{Penalty}\right)")
     st.latex(r"\hat{y} = \mathbb{1}\!\left[\text{LightGBM class} \neq \text{No Failure}\right]")
 
 # ── Tab 5: Alert History ───────────────────────────────────────────────────
@@ -719,7 +721,7 @@ if run_btn:
             # Risk calculation with Calibrator
             lgbm_ok   = (pred_label != 'No Failure')
             prev_s    = history[-1]['Smoothed_Risk'] if history else 0.0
-            raw_r, sm = compute_risk(lgbm_fail_prob, is_anomaly, lgbm_ok, prev_s, calibrator)
+            raw_r, sm = compute_risk(lgbm_fail_prob, lof_pct, is_anomaly, lgbm_ok, prev_s, calibrator)
             stage     = "CRITICAL" if lgbm_ok else get_stage(sm)
             y_pred    = int(lgbm_ok)
             ttf       = estimate_ttf(history, sm)
