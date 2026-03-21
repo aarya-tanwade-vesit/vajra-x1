@@ -98,6 +98,7 @@ _MODEL_FILES = [
 _SCENARIO_FILES = [
     "scenario_osf.csv", "scenario_hdf.csv",
     "scenario_pwf.csv", "scenario_twf.csv",
+    "scenario_mixed.csv"
 ]
 
 _missing = [f for f in _MODEL_FILES + _SCENARIO_FILES if not pathlib.Path(f).exists()]
@@ -415,12 +416,14 @@ def notify_background(email_cfg, sms_cfg, subject, html, sms_body,
 # Scenarios
 # ---------------------------------------------------------------------------
 SCENARIOS = {
+    "MIXED -- Unseen Linear Degradation (Demo)": "scenario_mixed.csv",
     "OSF -- Overstrain Failure":       "scenario_osf.csv",
     "HDF -- Heat Dissipation Failure": "scenario_hdf.csv",
     "PWF -- Power Failure":            "scenario_pwf.csv",
     "TWF -- Tool Wear Failure":        "scenario_twf.csv",
 }
 SCENARIO_DESC = {
+    "MIXED -- Unseen Linear Degradation (Demo)": ("Unknown", "A slow, realistic, linear degradation ending in a surprise failure."),
     "OSF -- Overstrain Failure":       ("Screw", "Tool Wear x Torque > 12,000 Nm.min"),
     "HDF -- Heat Dissipation Failure": ("Thermometer", "Temp Diff < 8.6K AND RPM < 1380"),
     "PWF -- Power Failure":            ("Lightning", "Power < 3500W or > 9000W"),
@@ -726,6 +729,7 @@ if run_btn:
                 'LGBM_Fail':           round(lgbm_fail, 2),
                 'Stage':               stage,
                 'Pred_Failure':        y_pred,
+                'Failure_Mode':        top_mode[0],
                 'Machine_failure':     int(row_df['Machine_failure'].iloc[0]) if has_gt else 0,
                 'Torque':              float(row_df['Torque'].iloc[0]),
                 'Tool_wear':           float(row_df['Tool_wear'].iloc[0]),
@@ -818,7 +822,7 @@ if run_btn:
                     )
                 else:
                     et.add_rows(last_r_gt[['Risk', 'GT_Failure_Pct']])
-                log_cols = ['Time_Second','Risk','LOF','LGBM_Fail','Machine_failure','Pred_Failure','Stage']
+                log_cols = ['Time_Second','Risk','LOF','LGBM_Fail','Machine_failure','Pred_Failure','Failure_Mode','Stage']
                 eval_log.dataframe(hdf[log_cols].tail(12),
                                     use_container_width=True, hide_index=True)
 
@@ -899,7 +903,6 @@ if run_btn:
         ss[2].metric("Failures",    str(int(hdf['Pred_Failure'].sum())))
         ss[3].metric("Stage Changes", str(len(alert_log)))
 
-    st.balloons()
 
 else:
     with tab_live:

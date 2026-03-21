@@ -88,6 +88,43 @@ def build_scenario(df, failure_col, n_healthy=80, n_approach=100, n_fail=20, see
     return scenario[keep]
 
 
+def build_synthetic_linear_hdf(n_steps=200):
+    """
+    Creates a realistic, slow linear degradation that eventually triggers an HDF failure.
+    The model has never seen this specific continuous sequence.
+    """
+    np.random.seed(42)
+    data = []
+    air_temp = 298.0
+    proc_temp = 309.5
+    rpm = 1500.0
+    torque = 40.0
+    wear = 10.0
+    
+    for t in range(n_steps):
+        temp_diff = proc_temp - air_temp
+        is_hdf = 1 if (temp_diff < 8.6 and rpm < 1380) else 0
+        
+        data.append({
+            'Time_Second': t,
+            'Machine_Type': 'H (High)',
+            'Air_temperature': air_temp + np.random.normal(0, 0.05),
+            'Process_temperature': proc_temp + np.random.normal(0, 0.05),
+            'Rotational_speed': rpm + np.random.normal(0, 2.0),
+            'Torque': torque + np.random.normal(0, 0.5),
+            'Tool_wear': wear + np.random.normal(0, 0.2),
+            'Machine_failure': is_hdf
+        })
+        
+        # Linearly degrade over time towards HDF
+        air_temp += 0.015
+        proc_temp -= 0.01
+        rpm -= 0.8
+        wear += 0.2
+        torque += 0.05
+        
+    return pd.DataFrame(data)
+
 def main():
     df = load_and_prep()
     scenarios = {
@@ -102,6 +139,12 @@ def main():
         sc.to_csv(f'{fname}.csv', index=False)
         fails = sc['Machine_failure'].sum()
         print(f"✅ {fname}.csv — {len(sc)} rows | {fails} ground-truth failures | {label}")
+        
+    # Generate the linear mixed scenario
+    mixed_sc = build_synthetic_linear_hdf()
+    mixed_sc.to_csv('scenario_mixed.csv', index=False)
+    fails_mixed = mixed_sc['Machine_failure'].sum()
+    print(f"✅ scenario_mixed.csv — {len(mixed_sc)} rows | {fails_mixed} ground-truth failures | Linear Degradation (HDF) Demo")
 
 if __name__ == '__main__':
     main()
