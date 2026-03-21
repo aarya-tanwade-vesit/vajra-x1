@@ -434,8 +434,15 @@ SCENARIO_DESC = {
 # Sidebar
 # ---------------------------------------------------------------------------
 with st.sidebar:
-    st.markdown("## Vajra-X1")
-    st.caption("Industrial AI Predictive Maintenance")
+    st.markdown("## ⚡ Vajra-X1")
+    st.caption("Next-Gen Predictive Maintenance Command Center")
+    st.markdown("""
+<div style="font-size:0.8rem; color:#8B949E; margin-bottom:1rem;">
+<b>AI Engine:</b> Dual-Layer Architecture<br>
+<b>L1:</b> LOF (Unsupervised Anomaly Detection)<br>
+<b>L2:</b> LightGBM (Multiclass Supervised xAI)
+</div>
+""", unsafe_allow_html=True)
     st.divider()
 
     scenario = st.selectbox("Scenario", list(SCENARIOS.keys()),
@@ -627,13 +634,13 @@ with tab_arch:
         st.info("Weight: **65%** of risk score")
 
     with a2:
-        st.markdown("### Layer 2: LightGBM")
+        st.markdown("### Layer 2: LightGBM (xAI)")
         with st.container(border=True):
             st.markdown("""
-**Gradient Boosted Tree Classifier**
+**Multiclass Gradient Boosted Trees**
 - Trained on full AI4I 2020 dataset (10,000 rows)
 - **98% accuracy** on failure classification
-- Hard prediction drives y_pred (never a threshold)
+- **Explainable AI (xAI):** Doesn't just predict *if* it fails, but *how* it fails by outputting probabilities for 5 distinct failure modes (HDF, OSF, PWF, TWF, RNF).
 - If it fires -> **Risk overrides to 100%**
 """)
         st.info("Weight: **35%** of risk score")
@@ -642,15 +649,13 @@ with tab_arch:
         st.markdown("### Design Rationale")
         with st.container(border=True):
             st.markdown("""
-**LightGBM = Light Switch**
-0% until it matches a known pattern. Then 100%.
+**Unsupervised + Supervised Synergy**
 
-**LOF = Dimmer Switch**
-Rises from the moment sensors drift from the
-healthy cluster -- catches failures *minutes*
-before LightGBM detects anything.
+**LOF = The Early Warning System**
+Detects when sensors "feel wrong" and drift from the healthy baseline. It catches anomalies *minutes* before a known failure signature forms.
 
-**Together:** Early Warning + Hard Confirmation.
+**LightGBM = The Diagnostic Expert**
+Stays at 0% until it mathematically recognizes a specific failure signature (e.g., Heat Dissipation). Once recognized, it diagnoses the exact root cause.
 """)
         st.success("Benchmarked vs Isolation Forest & Autoencoder")
 
