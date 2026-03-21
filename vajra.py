@@ -145,8 +145,10 @@ def engineer(row):
     return d[FEATURES]
 
 def lof_to_pct(raw):
-    """LOF decision_function >= 0.3 -> 0% risk, <= -0.3 -> 100% risk."""
-    return float(max(0.0, min(100.0, (0.3 - raw) / 0.6 * 100)))
+    """LOF decision_function >= 0.5 -> 0% risk, <= -2.0 -> 100% risk.
+    The new LOF model outputs values from ~1.0 down to -13.0 instead of just +/- 0.3.
+    """
+    return float(max(0.0, min(100.0, (0.5 - raw) / 2.5 * 100)))
 
 # ---------------------------------------------------------------------------
 # Risk computation  (EMA smoothed, Calibrated override)
